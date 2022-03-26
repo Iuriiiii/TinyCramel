@@ -96,7 +96,7 @@ Function GetTokenS(token As CML_TOKEN) As String
     GetTokenS = token.s
 End Function
 
-Private Sub POP_OPERATORS_TO_stk(ops() As String, stk() As SHUNTING_ITEM_DEFINE)
+Private Sub POP_OPERATORS_TO_STK(ops() As String, stk() As SHUNTING_ITEM_DEFINE)
     While PeekS(ops) <> "(" And PeekS(ops) <> ""
         PushStringToSID stk, PopS(ops), TOKEN_TYPE_OPERATOR
     Wend
@@ -134,10 +134,12 @@ End Function
 Function SHUNTING_YARD(tokens() As CML_TOKEN, Optional ByVal idx As Long = 1) As SHUNTING_ITEM_DEFINE()
     Dim stk() As SHUNTING_ITEM_DEFINE
     Dim ops() As String
+    Dim pre() As String
     
     ReDim ret(0)
     ReDim ops(0)
     ReDim stk(0)
+    ReDim pre(0)
     
     ' De derecha a izquierda
     ' For idx = Ubound(tockens) to 1 Step -1
@@ -153,7 +155,7 @@ Function SHUNTING_YARD(tokens() As CML_TOKEN, Optional ByVal idx As Long = 1) As
             Case TOKEN_TYPE_SEPARATOR
                 PROCESS_SEPARATOR tokens, idx, ops, stk
             Case TOKEN_TYPE_OPERATOR
-                PROCESS_OPERATOR tokens, idx, ops, stk
+                PROCESS_OPERATOR tokens, idx, ops, pre, stk
             Case Else
                 PushTokenToSID stk, tokens(idx)
         End Select
@@ -161,6 +163,10 @@ Function SHUNTING_YARD(tokens() As CML_TOKEN, Optional ByVal idx As Long = 1) As
     
     While PeekS(ops) <> "(" And PeekS(ops) <> ""
         PushStringToSID stk, PopS(ops), TOKEN_TYPE_OPERATOR
+    Wend
+    
+    While PeekS(pre) <> ""
+        PushStringToSID stk, PopS(pre), TOKEN_TYPE_OPERATOR
     Wend
     
     SHUNTING_YARD = stk
@@ -174,7 +180,6 @@ Private Sub PROCESS_IDENTIFIER(tokens() As CML_TOKEN, ByRef idx As Long, ops() A
     ReDim Preserve stk(UBound(stk) + 1)
     ReDim stk(UBound(stk)).tokens(0)
     
-
     While tokens(idx).t <> TOKEN_TYPE_OPERATOR And tokens(idx).t <> TOKEN_TYPE_EOL And tokens(idx).t <> TOKEN_TYPE_EOF Or (cor Or lla Or par)
         Select Case tokens(idx).t
             Case TOKEN_TYPE_SEPARATOR
@@ -224,9 +229,9 @@ Private Sub PROCESS_SEPARATOR(tokens() As CML_TOKEN, ByRef idx As Long, ops() As
                 PushS ops, "("
             End If
         Case ","
-            POP_OPERATORS_TO_stk ops, stk
+            POP_OPERATORS_TO_STK ops, stk
         Case ")"
-            POP_OPERATORS_TO_stk ops, stk
+            POP_OPERATORS_TO_STK ops, stk
             PopS ops ' Remueve '('
         Case "["
             Assert PeekT(PeekSID(stk).tokens).t <> TOKEN_TYPE_OPERATOR, "Imposible establecer una dimensión a un operador."
@@ -248,10 +253,15 @@ Private Sub PROCESS_SEPARATOR(tokens() As CML_TOKEN, ByRef idx As Long, ops() As
     End Select
 End Sub
 
-Private Sub PROCESS_OPERATOR(tokens() As CML_TOKEN, ByVal idx As Long, ops() As String, stk() As SHUNTING_ITEM_DEFINE)
+Private Sub PROCESS_OPERATOR(tokens() As CML_TOKEN, ByVal idx As Long, ops() As String, pre() As String, stk() As SHUNTING_ITEM_DEFINE)
+    If GetTokenS(tokens(idx)) = "=" Then
+        PushS pre, GetTokenS(tokens(idx))
+        Exit Sub
+    End If
+    
     Select Case VERIFY_PRECEDENCE(GetTokenS(tokens(idx)), PeekS(ops))
         Case BELOW
-            POP_OPERATORS_TO_stk ops, stk
+            POP_OPERATORS_TO_STK ops, stk
             'PushS GetTokenS(tokens(idx)), ops
         Case EQUAL
             PushStringToSID stk, PopS(ops), TOKEN_TYPE_OPERATOR
@@ -259,5 +269,6 @@ Private Sub PROCESS_OPERATOR(tokens() As CML_TOKEN, ByVal idx As Long, ops() As 
         'Case ABOVE
             'PushS GetTokenS(tokens(idx)), ops
     End Select
+    
     PushS ops, GetTokenS(tokens(idx))
 End Sub

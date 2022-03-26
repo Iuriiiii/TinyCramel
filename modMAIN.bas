@@ -5,6 +5,8 @@ Sub Main()
     INIT_COMPILER
     PARSE
     COMPILE
+    Clipboard.Clear
+    Clipboard.SetText GET_COMPILED_CODE
     MsgBox GET_COMPILED_CODE
 End Sub
 

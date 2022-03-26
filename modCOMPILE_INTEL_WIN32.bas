@@ -11,7 +11,7 @@ Private Enum CML_REGISTER
     NONE = 0
     eax
     EBX
-    ECX
+    ecx
     EDX
     EDI
     ESI
@@ -21,7 +21,7 @@ Private Enum CML_REGISTER
     BL
     BH
     BX
-    CL
+    cl
     CH
     CX
     DL
@@ -50,7 +50,7 @@ Private Function REGISTER_TO_STRING(ByVal regiser As CML_REGISTER) As String
         Case NONE: Exit Function
         Case eax: REGISTER_TO_STRING = "eax"
         Case EBX: REGISTER_TO_STRING = "ebx"
-        Case ECX: REGISTER_TO_STRING = "ecx"
+        Case ecx: REGISTER_TO_STRING = "ecx"
         Case EDX: REGISTER_TO_STRING = "edx"
         Case EDI: REGISTER_TO_STRING = "edi"
         Case ESI: REGISTER_TO_STRING = "esi"
@@ -148,6 +148,8 @@ Private Function COMPILE_EXPRESSION(rpn() As SHUNTING_ITEM_DEFINE, Optional regi
     
     ReDim stack(0)
     
+    'ShowShuntingYard rpn
+    
     For i = 1 To UBound(rpn)
         Select Case rpn(i).tokens(1).t
             Case TOKEN_TYPE_SEPARATOR
@@ -179,24 +181,34 @@ Private Sub COMPILE_EXPRESSION_BY_OPERATOR(stack() As SHUNTING_ITEM_DEFINE, op A
             Select Case True
                 Case l.tokens(1).t = TOKEN_TYPE_NUMBER And r.tokens(1).t = TOKEN_TYPE_NUMBER
                     PushSID stack, COMPILE_NUMBER_WITH_NUMBER(l, r, op, register)
+                    
                 Case l.tokens(1).t = TOKEN_TYPE_NUMBER And r.tokens(1).t = TOKEN_TYPE_STRING
                     
                 Case l.tokens(1).t = TOKEN_TYPE_REGISTER And r.tokens(1).t = TOKEN_TYPE_IDENTIFIER
                     PushSID stack, COMPILE_REGISTER_WITH_IDENTIFIER(l, r, op, register)
+                    
                 Case l.tokens(1).t = TOKEN_TYPE_IDENTIFIER And r.tokens(1).t = TOKEN_TYPE_REGISTER
                     PushSID stack, COMPILE_IDENTIFIER_WITH_REGISTER(l, r, op, register)
+                    
                 Case l.tokens(1).t = TOKEN_TYPE_IDENTIFIER And r.tokens(1).t = TOKEN_TYPE_NUMBER
                     PushSID stack, COMPILE_IDENTIFIER_WITH_NUMBER(l, r, op, register)
+                    
+                Case l.tokens(1).t = TOKEN_TYPE_IDENTIFIER And r.tokens(1).t = TOKEN_TYPE_IDENTIFIER
+                    PushSID stack, COMPILE_IDENTIFIER_WITH_IDENTIFIER(l, r, op, register, stack)
+                    
                 Case l.tokens(1).t = TOKEN_TYPE_REGISTER And r.tokens(1).t = TOKEN_TYPE_NUMBER
                     PushSID stack, COMPILE_REGISTER_WITH_NUMBER(l, r, op, register)
+                    
                 Case l.tokens(1).t = TOKEN_TYPE_NUMBER And r.tokens(1).t = TOKEN_TYPE_REGISTER
                     PushSID stack, COMPILE_NUMBER_WITH_REGISTER(l, r, op, register)
+                    
                 Case l.tokens(1).t = TOKEN_TYPE_NUMBER And r.tokens(1).t = TOKEN_TYPE_IDENTIFIER
                     PushSID stack, COMPILE_NUMBER_WITH_IDENTIFIER(l, r, op, register)
+                    
                 Case l.tokens(1).t = TOKEN_TYPE_REGISTER And r.tokens(1).t = TOKEN_TYPE_REGISTER
                     PushSID stack, COMPILE_REGISTER_WITH_REGISTER(l, r, op, register)
-                Case l.tokens(1).t = TOKEN_TYPE_IDENTIFIER And r.tokens(1).t = TOKEN_TYPE_IDENTIFIER
-                    PushSID stack, COMPILE_IDENTIFIER_WITH_IDENTIFIER(l, r, op, register)
+                    
+
             End Select
     End Select
 End Sub
@@ -370,6 +382,7 @@ Private Function COMPILE_REGISTER_WITH_IDENTIFIER(l As SHUNTING_ITEM_DEFINE, r A
             CALC_REGISTER_WITH_REGISTER_VALUE register, EDI, op, ccid.v.datatype
         Case ccid.register = NONE
             CALC_REGISTER_WITH_VARIABLE register, ccid.v, op
+            ret.extra = register
     End Select
     
     COMPILE_REGISTER_WITH_IDENTIFIER = ret
@@ -392,7 +405,7 @@ Private Function COMPILE_REGISTER_WITH_REGISTER(l As SHUNTING_ITEM_DEFINE, r As 
     ReDim ret.tokens(1)
     
     ret.tokens(1).t = TOKEN_TYPE_REGISTER
-    ret.extra = CALC_REGISTER_WITH_REGISTER(l.extra, r.extra)
+    ret.extra = CALC_REGISTER_WITH_REGISTER(l.extra, r.extra, op)
     
     COMPILE_REGISTER_WITH_REGISTER = ret
 End Function
@@ -406,10 +419,11 @@ Private Function COMPILE_IDENTIFIER_WITH_REGISTER(l As SHUNTING_ITEM_DEFINE, r A
     
     COMPILE_IDENTIFIER l, ccid, register
     
-    If op = "=" Then
-        MOVE_REGISTER_TO_POINTER_VARIABLE register, ccid
-        ret = l
-    ElseIf ccid.register = 0 Then
+    'If op = "=" Then
+    '    MOVE_REGISTER_TO_POINTER_VARIABLE register, ccid
+    '    ret = l
+    'Else
+    If ccid.register = 0 Then
         'CALC_IDENTIFIER_WITH_REGISTER
         'XCHG register, EBX
         If op = "/" Then
@@ -428,13 +442,17 @@ Private Function COMPILE_IDENTIFIER_WITH_REGISTER(l As SHUNTING_ITEM_DEFINE, r A
     COMPILE_IDENTIFIER_WITH_REGISTER = ret
 End Function
 
-Private Function COMPILE_IDENTIFIER_WITH_IDENTIFIER(l As SHUNTING_ITEM_DEFINE, r As SHUNTING_ITEM_DEFINE, op As String, ByVal register As CML_REGISTER) As SHUNTING_ITEM_DEFINE
+Private Function COMPILE_IDENTIFIER_WITH_IDENTIFIER(l As SHUNTING_ITEM_DEFINE, r As SHUNTING_ITEM_DEFINE, op As String, ByVal register As CML_REGISTER, stack() As SHUNTING_ITEM_DEFINE) As SHUNTING_ITEM_DEFINE
     Dim ret As SHUNTING_ITEM_DEFINE
     Dim ccidr As CML_COMPILED_IDENTIFIER_DEFINITION
     Dim ccidl As CML_COMPILED_IDENTIFIER_DEFINITION
     
     ReDim ret.tokens(1)
     ret.tokens(1).t = TOKEN_TYPE_REGISTER
+    
+    If I_NEED_PRESERVE_REGISTER(stack) Then
+        register = register + 1
+    End If
     
     COMPILE_IDENTIFIER r, ccidr, register, , EDI
     COMPILE_IDENTIFIER l, ccidl, register, , register, True
@@ -444,10 +462,11 @@ Private Function COMPILE_IDENTIFIER_WITH_IDENTIFIER(l As SHUNTING_ITEM_DEFINE, r
     'Clipboard.SetText ccidl.code
     
     Select Case True
-        Case op = "="
-            COMPILE_IDENTIFIER l, ccidl, register, , register
+        'Case op = "="
+        '    MOV_VARIABLE_TO_REGISTER ccidr.v, register
+        '    MOV_REGISTER_TO_VARIABLE register, ccidr.v
+            'COMPILE_IDENTIFIER l, ccidl, register, , register
             
-        
         Case ccidl.pointer And ccidl.register = NONE And ccidr.register = NONE And ccidr.pointer = 0
             MOV_INPUT_TO_REGISTER ccidl.v.uname, register
             CALC_REGISTER_WITH_VARIABLE register, ccidr.v, op
@@ -484,9 +503,15 @@ Private Function COMPILE_IDENTIFIER_WITH_IDENTIFIER(l As SHUNTING_ITEM_DEFINE, r
         
         ' La variable de la izquierda no es un puntero ni un registro
         Case ccidl.pointer = 0 And ccidl.register = NONE And ccidr.register = NONE And ccidr.pointer = 0
-            MOV_INPUT_TO_REGISTER ccidl.v.uname, register
-            CALC_REGISTER_WITH_VARIABLE register, ccidr.v, op
-        
+            
+            If op = "=" Then
+                MOV_VARIABLE_TO_REGISTER ccidr.v, register
+                CALC_REGISTER_WITH_VARIABLE register, ccidl.v, op
+            Else
+                MOV_VARIABLE_TO_REGISTER ccidl.v, register
+                CALC_REGISTER_WITH_VARIABLE register, ccidr.v, op
+            End If
+            
         Case ccidl.pointer = 0 And ccidl.register = NONE And ccidr.register = NONE And ccidr.pointer
             MOV_VARIABLE_TO_REGISTER ccidl.v, register
             CALC_REGISTER_WITH_INPUT register, ccidr.text, op
@@ -584,6 +609,28 @@ Private Sub MOV_VARIABLE_TO_REGISTER(v As CML_VARIABLE_DEFINITION, ByVal registe
     End Select
 End Sub
 
+Private Sub MOV_REGISTER_TO_VARIABLE(ByVal register As CML_REGISTER, v As CML_VARIABLE_DEFINITION)
+    Dim r As String
+    
+    r = REGISTER_TO_TEXT(register)
+    
+    Select Case v.datatype
+        Case var_type_byte
+            WLine "mov BYTE[[0]],[1]", v.uname, BYTE_OF_REGISTER(register)
+        Case var_type_dword
+            WLine "mov DWORD[[0]],[1]", v.uname, REGISTER_TO_TEXT(register)
+        Case var_type_float
+            WLine "mov BYTE[[0]],[1]", v.uname, BYTE_OF_REGISTER(register)
+        Case var_type_qword
+            'WLine "movzx [0],BYTE[[1]]", r, v.uname
+        Case var_type_word
+            WLine "mov BYTE[[0]],[1]", v.uname, WORD_OF_REGISTER(register)
+        Case var_type_compose
+            'Assert False, "No puede establecer "
+            'WLine "mov BYTE[[0]],", v.uname, BYTE_OF_REGISTER(register)
+    End Select
+End Sub
+
 Private Sub MOV_REGISTER_TO_REGISTER(ByVal dst As CML_REGISTER, ByVal src As CML_REGISTER, Optional ByVal datatype As CML_TYPE_VARIABLE = var_type_dword)
     Dim rdst As String
     Dim rsrc As String
@@ -653,7 +700,7 @@ Private Function REGISTER_TO_TEXT(ByVal register As CML_REGISTER) As String
             REGISTER_TO_TEXT = "eax"
         Case EBX
             REGISTER_TO_TEXT = "ebx"
-        Case ECX
+        Case ecx
             REGISTER_TO_TEXT = "ecx"
         Case EDX
             REGISTER_TO_TEXT = "edx"
@@ -670,7 +717,7 @@ Private Function BYTE_OF_REGISTER(ByVal register As CML_REGISTER) As String
             BYTE_OF_REGISTER = "al"
         Case EBX
             BYTE_OF_REGISTER = "bl"
-        Case ECX
+        Case ecx
             BYTE_OF_REGISTER = "cl"
         Case EDX
             BYTE_OF_REGISTER = "dl"
@@ -687,7 +734,7 @@ Private Function WORD_OF_REGISTER(ByVal register As CML_REGISTER) As String
             REGISTER_TO_TEXT = "ax"
         Case EBX
             REGISTER_TO_TEXT = "bx"
-        Case ECX
+        Case ecx
             REGISTER_TO_TEXT = "cx"
         Case EDX
             REGISTER_TO_TEXT = "dx"
@@ -843,10 +890,10 @@ Private Function CALC_REGISTER_WITH_REGISTER(ByVal r1 As CML_REGISTER, ByVal r2 
             
             If r1 <> eax Then XCHG eax, r1
         Case "<<"
-            MOV_REGISTER_TO_REGISTER ECX, rr
+            MOV_REGISTER_TO_REGISTER ecx, rr
             WLine "shl [0],cl", rl
         Case ">>"
-            MOV_REGISTER_TO_REGISTER ECX, rr
+            MOV_REGISTER_TO_REGISTER ecx, rr
             WLine "shr [0],cl", rl
         Case "%"
             If r1 <> eax Then XCHG eax, r1
@@ -919,7 +966,9 @@ Private Function CALC_IDENTIFIER_WITH_NUMBER(l As SHUNTING_ITEM_DEFINE, ByVal n 
         Dim v As CML_VARIABLE_DEFINITION
         v.uname = cexpr.text
         v.datatype = cexpr.v.datatype
-        CALC_IDENTIFIER_WITH_NUMBER = CALC_REGISTER_WITH_VARIABLE(register, v, op, invert)
+        'CALC_IDENTIFIER_WITH_NUMBER = CALC_REGISTER_WITH_VARIABLE(register, v, op, invert)
+        MOV_NUMBER_TO_REGISTER register, n
+        CALC_REGISTER_WITH_VARIABLE register, v, op, invert
     End If
 End Function
 
@@ -943,7 +992,7 @@ Private Function CALC_REGISTER_WITH_INPUT(ByVal register As CML_REGISTER, s As S
         Case "/", "%"
             WLine "mov ecx,[0]", s
             
-            If invert Then XCHG register, ECX
+            If invert Then XCHG register, ecx
             
             If register = eax Then
                 WLine "div ecx"
@@ -953,7 +1002,7 @@ Private Function CALC_REGISTER_WITH_INPUT(ByVal register As CML_REGISTER, s As S
                 XCHG eax, register
             End If
             
-            If invert Then XCHG register, ECX
+            If invert Then XCHG register, ecx
             
             If op = "%" Then CALC_REGISTER_WITH_INPUT = EDX
             
@@ -967,12 +1016,12 @@ Private Function CALC_REGISTER_WITH_INPUT(ByVal register As CML_REGISTER, s As S
             'End If
         Case "<<"
             WLine "mov ecx,[0]", s
-            If invert Then XCHG register, ECX
+            If invert Then XCHG register, ecx
             
             WLine "shl [0],cl", fr
         Case ">>"
             WLine "mov ecx,[0]", s
-            If invert Then XCHG register, ECX
+            If invert Then XCHG register, ecx
             
             WLine "shr [0],cl", fr
         Case "^"
@@ -1025,16 +1074,16 @@ Private Function CALC_REGISTER_WITH_NUMBER(ByVal register As CML_REGISTER, ByVal
     Select Case op
         Case "*"
             If register = eax Then
-                MOV_NUMBER_TO_REGISTER ECX, n
+                MOV_NUMBER_TO_REGISTER ecx, n
                 WLine "mul ecx"
             Else
                 WLine "imul [0],[1]", fr, n
             End If
         Case "/", "%"
             MOV_NUMBER_TO_REGISTER EDX, 0
-            MOV_NUMBER_TO_REGISTER ECX, n
+            MOV_NUMBER_TO_REGISTER ecx, n
             
-            If invert Then XCHG register, ECX
+            If invert Then XCHG register, ecx
             
             If register = eax Then
                 WLine "div ecx"
@@ -1044,7 +1093,7 @@ Private Function CALC_REGISTER_WITH_NUMBER(ByVal register As CML_REGISTER, ByVal
                 XCHG eax, register
             End If
             
-            If invert Then XCHG register, ECX
+            If invert Then XCHG register, ecx
             
             If op = "%" Then CALC_REGISTER_WITH_NUMBER = EDX
             
@@ -1057,13 +1106,13 @@ Private Function CALC_REGISTER_WITH_NUMBER(ByVal register As CML_REGISTER, ByVal
             '    WLine "xchg eax,ecx"
             'End If
         Case "<<"
-            MOV_NUMBER_TO_REGISTER ECX, n
-            If invert Then XCHG register, ECX
+            MOV_NUMBER_TO_REGISTER ecx, n
+            If invert Then XCHG register, ecx
             
             WLine "shl [0],cl", fr
         Case ">>"
-            MOV_NUMBER_TO_REGISTER ECX, n
-            If invert Then XCHG register, ECX
+            MOV_NUMBER_TO_REGISTER ecx, n
+            If invert Then XCHG register, ecx
             
             WLine "shr [0],cl", fr
         Case "^"
@@ -1135,26 +1184,30 @@ Private Function CALC_REGISTER_WITH_VARIABLE(register As CML_REGISTER, v As CML_
     ds = DATATYPE_TO_I32(v.datatype)
     
     Select Case op
+        Case "=" ' Asignación
+            'If v.datatype = var_type_byte Then
+            MOV_REGISTER_TO_VARIABLE register, v
+            
         Case "*", "/"
             XCHG eax, register
             
             If IS_I32_4BYTES(v.datatype) Then
                 WLine "[0] DWORD[[1]]", IIf(op = "/", "div", "mul"), v.uname
             Else
-                MOVE_VARIABLE_TO_REGISTER v, ECX
+                MOVE_VARIABLE_TO_REGISTER v, ecx
                 WLine "[0] ecx", IIf(op = "/", "div", "mul")
             End If
             
             XCHG eax, register
         Case "<<"
-            MOVE_VARIABLE_TO_REGISTER v, ECX
+            MOVE_VARIABLE_TO_REGISTER v, ecx
             WLine "shl [0],cl", r
         Case ">>"
-            MOVE_VARIABLE_TO_REGISTER v, ECX
+            MOVE_VARIABLE_TO_REGISTER v, ecx
             WLine "shr [0],cl", r
         Case "%"
             MOV_NUMBER_TO_REGISTER EDX, 0
-            MOVE_VARIABLE_TO_REGISTER v, ECX
+            MOVE_VARIABLE_TO_REGISTER v, ecx
             register = EDX
             
             If register <> eax Then WLine "xchg eax,[0]", r
@@ -1162,7 +1215,7 @@ Private Function CALC_REGISTER_WITH_VARIABLE(register As CML_REGISTER, v As CML_
             If IS_I32_4BYTES(v.datatype) Then
                 WLine "div DWORD[[0]]", v.uname
             Else
-                MOVE_VARIABLE_TO_REGISTER v, ECX
+                MOVE_VARIABLE_TO_REGISTER v, ecx
                 WLine "div ecx"
             End If
             
@@ -1185,7 +1238,7 @@ Private Function CALC_REGISTER_WITH_VARIABLE(register As CML_REGISTER, v As CML_
             If IS_I32_4BYTES(v.datatype) Then
                 WLine "test [0],DWORD[[1]]", r, v.uname
             Else
-                MOVE_VARIABLE_TO_REGISTER v, ECX
+                MOVE_VARIABLE_TO_REGISTER v, ecx
                 WLine "test [0],ecx", r
             End If
             
@@ -1202,7 +1255,7 @@ Private Function CALC_REGISTER_WITH_VARIABLE(register As CML_REGISTER, v As CML_
             If IS_I32_4BYTES(v.datatype) Then
                 WLine "cmp [0],DWORD[[1]]", r, v.uname
             Else
-                MOVE_VARIABLE_TO_REGISTER v, ECX
+                MOVE_VARIABLE_TO_REGISTER v, ecx
                 WLine "cmp [0],ecx", r
             End If
 
@@ -1389,3 +1442,14 @@ Private Sub XCHG(ByVal r1 As CML_REGISTER, ByVal r2 As CML_REGISTER)
     If r1 = r2 Then Exit Sub
     WLine "xchg [0],[1]", REGISTER_TO_TEXT(r1), REGISTER_TO_TEXT(r2)
 End Sub
+
+Private Function I_NEED_PRESERVE_REGISTER(stack() As SHUNTING_ITEM_DEFINE)
+    Dim i As Integer
+    
+    For i = 1 To UBound(stack)
+        If stack(i).tokens(1).t = TOKEN_TYPE_REGISTER Then
+            I_NEED_PRESERVE_REGISTER = True
+            Exit Function
+        End If
+    Next
+End Function

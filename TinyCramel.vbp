@@ -1,5 +1,5 @@
 Type=Exe
-Reference=*\G{00020430-0000-0000-C000-000000000046}#2.0#0#C:\Windows\SysWOW64\stdole2.tlb#OLE Automation
+Reference=*\G{00020430-0000-0000-C000-000000000046}#2.0#0#..\..\..\..\..\Windows\SysWOW64\stdole2.tlb#OLE Automation
 Module=modMAIN; modMAIN.bas
 Module=modVERIFICATION; modVERIFICATION.bas
 Module=modFILES; modFILES.bas
@@ -16,7 +16,7 @@ Startup="Sub Main"
 HelpFile=""
 Title="TinyCramel"
 ExeName32="TinyCramel.exe"
-Path32="C:\Users\Oscar\Desktop"
+Path32="..\..\..\Desktop"
 Command32="-f E:\Prueba.cml"
 Name="TinyCramel"
 HelpContextID="0"
