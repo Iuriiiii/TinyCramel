@@ -9,7 +9,7 @@ End Type
 
 Private Enum CML_REGISTER
     NONE = 0
-    eax
+    EAX
     EBX
     ecx
     EDX
@@ -48,7 +48,7 @@ Private G_PRIVATE_VALUES() As CML_VALUE_POINTER_DEFINITION
 Private Function REGISTER_TO_STRING(ByVal regiser As CML_REGISTER) As String
     Select Case register
         Case NONE: Exit Function
-        Case eax: REGISTER_TO_STRING = "eax"
+        Case EAX: REGISTER_TO_STRING = "eax"
         Case EBX: REGISTER_TO_STRING = "ebx"
         Case ecx: REGISTER_TO_STRING = "ecx"
         Case EDX: REGISTER_TO_STRING = "edx"
@@ -142,7 +142,7 @@ Private Sub COMPILE_FOOTER()
     
 End Sub
 
-Private Function COMPILE_EXPRESSION(rpn() As SHUNTING_ITEM_DEFINE, Optional register As CML_REGISTER = eax) As SHUNTING_ITEM_DEFINE
+Private Function COMPILE_EXPRESSION(rpn() As SHUNTING_ITEM_DEFINE, Optional register As CML_REGISTER = EAX) As SHUNTING_ITEM_DEFINE
     Dim i As Long
     Dim stack() As SHUNTING_ITEM_DEFINE
     
@@ -208,7 +208,6 @@ Private Sub COMPILE_EXPRESSION_BY_OPERATOR(stack() As SHUNTING_ITEM_DEFINE, op A
                 Case l.tokens(1).t = TOKEN_TYPE_REGISTER And r.tokens(1).t = TOKEN_TYPE_REGISTER
                     PushSID stack, COMPILE_REGISTER_WITH_REGISTER(l, r, op, register)
                     
-
             End Select
     End Select
 End Sub
@@ -521,8 +520,13 @@ Private Function COMPILE_IDENTIFIER_WITH_IDENTIFIER(l As SHUNTING_ITEM_DEFINE, r
             CALC_REGISTER_WITH_REGISTER_VALUE register, EDI, op, ccidr.v.datatype
         
         Case ccidl.pointer = 0 And ccidl.register = NONE And ccidr.register <> NONE And ccidr.pointer
-            MOV_INPUT_TO_REGISTER ccidl.v.uname, register
-            CALC_REGISTER_WITH_REGISTER register, EDI, op
+            'MOV_INPUT_TO_REGISTER ccidl.v.uname, register
+            'CALC_REGISTER_WITH_REGISTER register, EDI, op,
+            ' TODO: FINALIZAR
+            ' La siguiente línea de código no tiene sentido porque el retorno es un registro
+            'MOV_INPUT_TO_REGISTER ccidr.text, register
+            MOV_REGISTER_TO_VARIABLE ccidr.register, ccidl.v
+            
         ' La variable de la izquierda no es un puntero
         Case ccidl.pointer = 0 And ccidl.register <> NONE And ccidr.register = NONE And ccidr.pointer = 0
             
@@ -696,7 +700,7 @@ End Sub
 
 Private Function REGISTER_TO_TEXT(ByVal register As CML_REGISTER) As String
     Select Case register
-        Case eax
+        Case EAX
             REGISTER_TO_TEXT = "eax"
         Case EBX
             REGISTER_TO_TEXT = "ebx"
@@ -713,7 +717,7 @@ End Function
 
 Private Function BYTE_OF_REGISTER(ByVal register As CML_REGISTER) As String
     Select Case register
-        Case eax
+        Case EAX
             BYTE_OF_REGISTER = "al"
         Case EBX
             BYTE_OF_REGISTER = "bl"
@@ -730,7 +734,7 @@ End Function
 
 Private Function WORD_OF_REGISTER(ByVal register As CML_REGISTER) As String
     Select Case register
-        Case eax
+        Case EAX
             REGISTER_TO_TEXT = "ax"
         Case EBX
             REGISTER_TO_TEXT = "bx"
@@ -751,6 +755,8 @@ Private Function CALC_REGISTER_WITH_REGISTER_VALUE(ByVal r1 As CML_REGISTER, ByV
     Dim bsl As String
     Dim ds As String
     
+    Assert datatype <> var_type_compose, "Usted no puede realizar cálculos o asignaciones con un dato compuesto."
+    
     rl = REGISTER_TO_TEXT(r1)
     rr = REGISTER_TO_TEXT(r2)
     bsl = BYTE_OF_REGISTER(r1)
@@ -759,7 +765,7 @@ Private Function CALC_REGISTER_WITH_REGISTER_VALUE(ByVal r1 As CML_REGISTER, ByV
     
     Select Case op
         Case "*", "/"
-            If r1 <> eax Then XCHG eax, r1
+            If r1 <> EAX Then XCHG EAX, r1
             
             Select Case datatype
                 Case var_type_byte, var_type_word
@@ -773,7 +779,7 @@ Private Function CALC_REGISTER_WITH_REGISTER_VALUE(ByVal r1 As CML_REGISTER, ByV
                     
             End Select
             
-            If r1 <> eax Then XCHG eax, r1
+            If r1 <> EAX Then XCHG EAX, r1
         Case "<<"
             Select Case datatype
                 Case var_type_byte, var_type_word
@@ -801,12 +807,12 @@ Private Function CALC_REGISTER_WITH_REGISTER_VALUE(ByVal r1 As CML_REGISTER, ByV
             End Select
             WLine "shr [0],cl", rl
         Case "%"
-            If r1 <> eax Then XCHG eax, r1
+            If r1 <> EAX Then XCHG EAX, r1
             CALC_REGISTER_WITH_REGISTER_VALUE = EDX
             
             WLine "[0] [1]", IIf(op = "/", "div", "mul"), rr
             
-            If r1 <> eax Then XCHG eax, r1
+            If r1 <> EAX Then XCHG EAX, r1
             WLine "; El resultado está en EDX"
         Case "^"
             'OPERATOR_TO_PRECEDENCE = 9.4
@@ -871,7 +877,7 @@ Private Function CALC_REGISTER_WITH_REGISTER_VALUE(ByVal r1 As CML_REGISTER, ByV
 
 End Function
 
-Private Function CALC_REGISTER_WITH_REGISTER(ByVal r1 As CML_REGISTER, ByVal r2 As CML_REGISTER, op As String) As CML_REGISTER
+Private Function CALC_REGISTER_WITH_REGISTER(ByVal r1 As CML_REGISTER, ByVal r2 As CML_REGISTER, op As String, Optional ByVal datatype As CML_TYPE_VARIABLE) As CML_REGISTER
     Dim rl As String
     Dim rr As String
     Dim bsl As String
@@ -883,12 +889,15 @@ Private Function CALC_REGISTER_WITH_REGISTER(ByVal r1 As CML_REGISTER, ByVal r2 
     CALC_REGISTER_WITH_REGISTER = r1
     
     Select Case op
+        Case "="
+            MOV_REGISTER_TO_REGISTER r1, r2, datatype
+            
         Case "*", "/"
-            If r1 <> eax Then XCHG eax, r1
+            If r1 <> EAX Then XCHG EAX, r1
             
             WLine "[0] [1]", IIf(op = "/", "div", "mul"), rr
             
-            If r1 <> eax Then XCHG eax, r1
+            If r1 <> EAX Then XCHG EAX, r1
         Case "<<"
             MOV_REGISTER_TO_REGISTER ecx, rr
             WLine "shl [0],cl", rl
@@ -896,12 +905,12 @@ Private Function CALC_REGISTER_WITH_REGISTER(ByVal r1 As CML_REGISTER, ByVal r2 
             MOV_REGISTER_TO_REGISTER ecx, rr
             WLine "shr [0],cl", rl
         Case "%"
-            If r1 <> eax Then XCHG eax, r1
+            If r1 <> EAX Then XCHG EAX, r1
             CALC_REGISTER_WITH_REGISTER = EDX
             
             WLine "[0] [1]", IIf(op = "/", "div", "mul"), rr
             
-            If r1 <> eax Then XCHG eax, r1
+            If r1 <> EAX Then XCHG EAX, r1
             WLine "; El resultado está en EDX"
         Case "^"
             'OPERATOR_TO_PRECEDENCE = 9.4
@@ -940,8 +949,6 @@ Private Function CALC_REGISTER_WITH_REGISTER(ByVal r1 As CML_REGISTER, ByVal r2 
                     WLine "setae [0]", bsl
             End Select
             WLine "movzx [0],[1]", rl, bsl
-        Case "="
-            Assert False, "Imposible asignar un valor a un número."
     End Select
 
 End Function
@@ -982,7 +989,7 @@ Private Function CALC_REGISTER_WITH_INPUT(ByVal register As CML_REGISTER, s As S
     
     Select Case op
         Case "*"
-            If register = eax Then
+            If register = EAX Then
                 WLine "mov ecx,[0]", s
                 WLine "mul ecx"
             Else
@@ -994,12 +1001,12 @@ Private Function CALC_REGISTER_WITH_INPUT(ByVal register As CML_REGISTER, s As S
             
             If invert Then XCHG register, ecx
             
-            If register = eax Then
+            If register = EAX Then
                 WLine "div ecx"
             Else
-                XCHG eax, register
+                XCHG EAX, register
                 WLine "div ecx"
-                XCHG eax, register
+                XCHG EAX, register
             End If
             
             If invert Then XCHG register, ecx
@@ -1073,7 +1080,7 @@ Private Function CALC_REGISTER_WITH_NUMBER(ByVal register As CML_REGISTER, ByVal
     
     Select Case op
         Case "*"
-            If register = eax Then
+            If register = EAX Then
                 MOV_NUMBER_TO_REGISTER ecx, n
                 WLine "mul ecx"
             Else
@@ -1085,12 +1092,12 @@ Private Function CALC_REGISTER_WITH_NUMBER(ByVal register As CML_REGISTER, ByVal
             
             If invert Then XCHG register, ecx
             
-            If register = eax Then
+            If register = EAX Then
                 WLine "div ecx"
             Else
-                XCHG eax, register
+                XCHG EAX, register
                 WLine "div ecx"
-                XCHG eax, register
+                XCHG EAX, register
             End If
             
             If invert Then XCHG register, ecx
@@ -1137,16 +1144,16 @@ Private Function CALC_REGISTER_WITH_NUMBER(ByVal register As CML_REGISTER, ByVal
             End Select
             WLine "movzx [0],[1]", fr, br
         Case "<=", "<", ">", ">="
-            WLine "cmp [0],[1]", n, fr
+            WLine "cmp [0],[1]", fr, n
             Select Case op
                 Case "<="
                     WLine "setle [0]", br
                 Case "<"
-                    WLine "setb [0]", br
+                    WLine "setnb [0]", br
                 Case ">"
-                    WLine "seta [0]", br
+                    WLine "setna [0]", br
                 Case ">="
-                    WLine "setae [0]", br
+                    WLine "setnae [0]", br
             End Select
             WLine "movzx [0],[1]", fr, br
         Case "="
@@ -1189,7 +1196,7 @@ Private Function CALC_REGISTER_WITH_VARIABLE(register As CML_REGISTER, v As CML_
             MOV_REGISTER_TO_VARIABLE register, v
             
         Case "*", "/"
-            XCHG eax, register
+            XCHG EAX, register
             
             If IS_I32_4BYTES(v.datatype) Then
                 WLine "[0] DWORD[[1]]", IIf(op = "/", "div", "mul"), v.uname
@@ -1198,7 +1205,7 @@ Private Function CALC_REGISTER_WITH_VARIABLE(register As CML_REGISTER, v As CML_
                 WLine "[0] ecx", IIf(op = "/", "div", "mul")
             End If
             
-            XCHG eax, register
+            XCHG EAX, register
         Case "<<"
             MOVE_VARIABLE_TO_REGISTER v, ecx
             WLine "shl [0],cl", r
@@ -1210,7 +1217,7 @@ Private Function CALC_REGISTER_WITH_VARIABLE(register As CML_REGISTER, v As CML_
             MOVE_VARIABLE_TO_REGISTER v, ecx
             register = EDX
             
-            If register <> eax Then WLine "xchg eax,[0]", r
+            If register <> EAX Then WLine "xchg eax,[0]", r
             
             If IS_I32_4BYTES(v.datatype) Then
                 WLine "div DWORD[[0]]", v.uname
@@ -1219,7 +1226,7 @@ Private Function CALC_REGISTER_WITH_VARIABLE(register As CML_REGISTER, v As CML_
                 WLine "div ecx"
             End If
             
-            If register <> eax Then WLine "xchg eax,[0]", r
+            If register <> EAX Then WLine "xchg eax,[0]", r
             WLine "; El resultado está en EDX"
         Case "^"
             'OPERATOR_TO_PRECEDENCE = 9.4
